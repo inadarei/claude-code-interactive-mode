@@ -1,7 +1,9 @@
 {
     "permissions": {
       "allow": [
-        "Bash(*)"
+        "Bash(*)",
+        "WebSearch(*)",
+        "WebFetch(*)"
       ],
       "deny": [
         "Bash(git*)",
