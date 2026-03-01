@@ -1,18 +1,30 @@
 {
-    "permissions": {
-      "allow": [
-        "Bash(*)",
-        "Read(*)",
-        "Write(*)",
-        "Edit(*)",
-        "WebSearch(*)",
-        "WebFetch(*)"          
-      ],
-      "ask": [
-        "Bash(git*)",
-        "Bash(sudo*)",
-        "Bash(brew*)"
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "WebSearch(*)",
+      "WebFetch(*)"          
+    ],
+    "ask": [
+      "Bash(git*)",
+      "Bash(sudo*)",
+      "Bash(brew*)"
+    ]
+  },
+  "hooks": {
+      "PostToolUse": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "bash .claude/hooks/check-context-doc.sh"
+            }
+          ]
+        }
       ]
-    }
+  }
 }
 
