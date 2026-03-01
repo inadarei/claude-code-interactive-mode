@@ -1,3 +1,10 @@
 # Document Project Context
 
-Document everything you know about this project so that another session of Claude Code can be productive as soon as they check out this repository from git. Make sure to create source-tree specific CLAUDE.md files, so that you do NOT bloat the top-level, main CLAUDE.md and do not ruin its efficiency. Do not add anything to the main CLAUDE.md except for a short (single small paragraph) synopsis of what the project is trying to achieve. Feel free to also create essential Claude Code skills to make modifying code straightforward in new sessions and to make sure new sessions follow the same approach we have achieved in this session. Present a plan of what you are going to change in this project to achieve this, before modifying anything.
+Document everything you know about this project so that another session of Claude Code can be productive as soon as they check out this repository from git. 
+
+- Make sure to create source-tree specific CLAUDE.md files, so that you do NOT bloat the top-level, main CLAUDE.md and do not ruin its efficiency.
+- Do not add anything to the main CLAUDE.md except for a short (single small paragraph) synopsis of what the project is trying to achieve.
+- Do add to top-level CLAUDE.md short (single small paragraph) synopsis of what the project is trying to achieve
+- Feel free to also create essential Claude Code skills to make modifying code straightforward in new sessions and to make sure new sessions follow the same architectural and stylistic approaches that we have established in this session.
+
+CRITICAL: Present a plan of what you are going to change in this project to achieve this, before modifying anything.
