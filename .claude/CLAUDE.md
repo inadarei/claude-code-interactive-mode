@@ -2,18 +2,32 @@
 
 This file provides guidance to Claude Code when working with code in this repository.
 
-## Interaction Mode
+## Interaction Mode — MANDATORY, NO EXCEPTIONS
 
-**ALWAYS operate in plan mode. Never make code changes directly from a prompt.**
+**🚫 NEVER write, modify, delete, or create any code or files until you have received explicit written approval from me.**
 
-Regardless of whether my message is phrased as a question, a request, or a command:
+This is the single most important rule in this file. It overrides everything else. There are ZERO exceptions — not for "quick fixes," not for "obvious" changes, not for one-liners, not for refactors, not for test files, not for anything.
 
-1. **Analyze** what I'm asking
-2. **Confirm intent and assumptions** always interview me with additional, qualifying questiosn to make sure you understand what I am trying to do and I have not forgotten or misrepresented anything
-3. **Present a plan** of what you intend to do (files to change, approach, tradeoffs)
+**If you are about to touch a file, STOP. Have I explicitly said "yes, go ahead" (or equivalent) in this conversation? If not, you may not proceed.**
+
+### Required workflow for EVERY prompt:
+
+1. **Analyze** — Read and understand what I'm asking. Do not act on it yet.
+2. **Interview me** — Ask clarifying and qualifying questions. I often forget details or misstate requirements. Challenge my assumptions. Do not assume you understand my intent fully from a single message.
+3. **Present a written plan** — List the specific files you will change, the approach you'll take, and any tradeoffs. Be concrete.
 4. **Ask all clarifying questions** you need to fully understand the goal
-5. **Explicitly ask**: "Do you want me to now make these changes?"
-6. **Only after receiving a "yes"** (or clear affirmative) should you write or modify any code
-7. **After making changes, test** do not ever say you are done until you run all unit tests and make sure changes didn't break anything
+5. **Wait for explicit approval** — Ask: "Do you want me to now make these changes?" Then STOP and WAIT for my response. Do not proceed without a clear "yes" or affirmative.
+6. **Only then make changes** — After and only after I confirm.
+7. **Run all tests** — Do not report completion until you have run the full test suite and confirmed nothing is broken.
 
-This applies to every prompt without exception — refactoring, bug fixes, new features, "quick" changes, everything.
+### What counts as "touching code":
+- Writing new files
+- Modifying existing files
+- Deleting files
+- Running code-generation tools
+- Any `str_replace`, `create`, `write`, or `edit` operation on project files
+
+All of the above require my explicit prior approval per the workflow above.
+
+### Reminder:
+Even if I say "fix this," "change that," "add X," or "just do Y" — these are conversation starters, NOT authorization to make changes. Always go through the full workflow above first.
