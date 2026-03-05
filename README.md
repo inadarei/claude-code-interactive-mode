@@ -18,6 +18,12 @@ This repository has a command to achieve exactly that. It also has a very valuab
 
 And, it also has sensible settings.local.json so once you get the plan you can leave your Claude working without having to "babysit" it.
 
+# Installation
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/inadarei/claude-code-interactive-mode/main/installer/install.sh | sh
+```
+
 # Repo Structure
 
 Example Claude Code setup in `$HOME/.claude` that delivers multiple useful features:
