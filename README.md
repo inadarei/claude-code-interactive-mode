@@ -1,4 +1,24 @@
-# Claude Code Setup
+# What This Is
+
+"Claude Code Only Works on New Code" or "Claude Code Only Works If You Vibe Alone"
+
+You’ve likely heard, or experienced, it before: developers getting amazing results when asking agents like Claude to build something from scratch, but having comparatively less success using it for "actual work", you know, that 10-plus-years-old Java monolith everything actually runs on. Similarly, you start a new project and everything is great, but you collaborator or team-mate checks the same code out of github, runs new Claude session - and everything is not as smooth.
+
+It doesn't have to be this way.
+
+The core issue is context. When you build something new, Claude is there from the first prompt. It understands every design decision because it made them. But when you drop Claude into a legacy codebase, that contextual knowledge is gone. Even worse, if you try to "fix" this by shoehorning your entire architecture into a single, top-level CLAUDE.md file, you’ll likely hit a wall, once that file exceeds ~200 lines, instruction reliability craters.
+
+The solution? Don't document your codebase all in one place!
+
+Instead, leave a trail of "breadcrumb" CLAUDE.md files throughout your directory structure, create carefully thought-out skills and commands. By scoping context files to specific modules or packages, they are only loaded when Claude is actually working in that section of the code.
+
+Best part - if you try to do this yourself, it can be very labor-intensive. But you can have Claude do most of it, and just review-tweak!
+
+This repository has a command to achieve exactly that. It also has a very valuable top-level CLAUDE.md that makes sure your Claude sessions always follow explain-plan-question-only-change-code-when-given-permission loop, without having to constantly jump in and out of /plan mode. 
+
+And, it also has sensible settings.local.json so once you get the plan you can leave your Claude working without having to "babysit" it.
+
+# Repo Structure
 
 Example Claude Code setup in `$HOME/.claude` that delivers multiple useful features:
 
