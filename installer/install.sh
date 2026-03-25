@@ -11,12 +11,16 @@ CLAUDE.md
 settings.local.json
 commands/document-context.md
 commands/instrument-project.md
+commands/pr-start.md
+commands/pr-end.md
 hooks/check-context-doc.sh
+scripts/pr-capture.sh
 "
 
 # Files that need executable bit set after download
 EXEC_FILES="
 hooks/check-context-doc.sh
+scripts/pr-capture.sh
 "
 
 # ---------------------------------------------------------------------------
