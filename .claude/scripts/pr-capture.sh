@@ -6,7 +6,7 @@
 # Usage: bash .claude/scripts/pr-capture.sh <ticket-id>
 #
 # Requires: python3 (no pip packages needed)
-# Reads:    pr-chats/.pr-tracking.json (for start timestamp)
+# Reads:    pr-chats/.pr-tracking.json (for start timestamp + session file)
 # Finds:    Current session JSONL in ~/.claude/projects/
 # Writes:   pr-chats/YY-MM-DD-HH-MM-<ticket-id>-detailed.md
 
@@ -27,7 +27,7 @@ if [[ ! -f "$TRACKING_FILE" ]]; then
   exit 1
 fi
 
-# ── Locate session transcript ──────────────────────────────────────────────────
+# ── Locate current session transcript ─────────────────────────────────────────
 
 PROJECT_DIR="$(pwd)"
 ENCODED_PATH="${PROJECT_DIR//\//-}"
@@ -60,31 +60,32 @@ if [[ ! -d "$SESSION_DIR" ]]; then
 fi
 
 # Find the most recently modified .jsonl file (current session)
-SESSION_FILE=$(newest_by_pattern "$SESSION_DIR" "*.jsonl")
+CURRENT_SESSION_FILE=$(newest_by_pattern "$SESSION_DIR" "*.jsonl")
 
-if [[ -z "$SESSION_FILE" || ! -f "$SESSION_FILE" ]]; then
+if [[ -z "$CURRENT_SESSION_FILE" || ! -f "$CURRENT_SESSION_FILE" ]]; then
   echo "ERROR: No JSONL session file found in: $SESSION_DIR" >&2
   exit 1
 fi
 
-echo "Session file: $SESSION_FILE" >&2
+echo "Current session file: $CURRENT_SESSION_FILE" >&2
 
 # ── Extract, format, and write ─────────────────────────────────────────────────
 
 mkdir -p pr-chats
 
-python3 - "$TICKET_ID" "$TRACKING_FILE" "$SESSION_FILE" "$PROJECT_DIR" << 'PYEOF'
+python3 - "$TICKET_ID" "$TRACKING_FILE" "$CURRENT_SESSION_FILE" "$PROJECT_DIR" << 'PYEOF'
 import json
 import sys
 import os
+import re
 from datetime import datetime, timezone
 
 ticket_id = sys.argv[1]
 tracking_file = sys.argv[2]
-session_file = sys.argv[3]
+current_session_file = sys.argv[3]
 project_dir = sys.argv[4]
 
-# Read start timestamp
+# Read tracking entry
 with open(tracking_file) as f:
     tracking = json.load(f)
 
@@ -92,11 +93,96 @@ if ticket_id not in tracking:
     print(f"ERROR: No tracking entry for ticket '{ticket_id}'", file=sys.stderr)
     sys.exit(1)
 
-start_ts = tracking[ticket_id]
+entry_data = tracking[ticket_id]
 
-# Parse session and extract from start_ts onward
-import re
+# Support both old format (string timestamp) and new format (object with start_ts + session_file)
+if isinstance(entry_data, str):
+    start_ts = entry_data
+    start_session_file = None
+elif isinstance(entry_data, dict):
+    start_ts = entry_data.get("start_ts", "")
+    start_session_file = entry_data.get("session_file")
+else:
+    print(f"ERROR: Invalid tracking entry format for '{ticket_id}'", file=sys.stderr)
+    sys.exit(1)
 
+if not start_ts:
+    print(f"ERROR: No start timestamp for ticket '{ticket_id}'", file=sys.stderr)
+    sys.exit(1)
+
+# Determine which files to read
+session_files = []
+if start_session_file and os.path.isfile(start_session_file):
+    session_files.append(start_session_file)
+    print(f"Start session file: {start_session_file}", file=sys.stderr)
+
+# Add current session file if different from start
+if current_session_file not in session_files:
+    session_files.append(current_session_file)
+    if start_session_file and start_session_file != current_session_file:
+        print(f"Session spans multiple JSONL files — reading both", file=sys.stderr)
+
+if not session_files:
+    print("ERROR: No session files to read", file=sys.stderr)
+    sys.exit(1)
+
+# Parse all session files and collect entries within the time window
+raw_entries = []
+
+for sf in session_files:
+    with open(sf) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            ts = entry.get("timestamp", "")
+            if not ts or ts < start_ts:
+                continue
+
+            msg_type = entry.get("type")
+            if msg_type not in ("user", "assistant"):
+                continue
+
+            raw_entries.append((ts, entry))
+
+# Sort by timestamp (stable — preserves order within same timestamp)
+raw_entries.sort(key=lambda x: x[0])
+
+# Deduplicate: same timestamp + type + content hash
+seen = set()
+entries = []
+for ts, entry in raw_entries:
+    msg_type = entry.get("type")
+    content = entry.get("message", {}).get("content", "")
+    # Build a dedup key from timestamp, type, and a content fingerprint
+    if isinstance(content, str):
+        fingerprint = content[:200]
+    elif isinstance(content, list):
+        parts = []
+        for p in content:
+            pt = p.get("type", "")
+            if pt == "text":
+                parts.append(p.get("text", "")[:100])
+            elif pt == "tool_use":
+                parts.append(f"tool:{p.get('name','')}")
+            elif pt == "tool_result":
+                parts.append(f"result:{p.get('tool_use_id','')[:20]}")
+        fingerprint = "|".join(parts)
+    else:
+        fingerprint = ""
+
+    dedup_key = f"{ts}|{msg_type}|{fingerprint}"
+    if dedup_key in seen:
+        continue
+    seen.add(dedup_key)
+    entries.append(entry)
+
+# Format entries into markdown
 output_parts = []
 user_count = 0
 assistant_count = 0
@@ -113,122 +199,109 @@ def extract_slash_command(text):
     args = args_match.group(1).strip() if args_match else ""
     return f"{cmd} {args}".strip() if args else cmd
 
-with open(session_file) as f:
-    for line in f:
-        line = line.strip()
-        if not line:
+for entry in entries:
+    msg_type = entry.get("type")
+
+    if msg_type == "user":
+        content = entry.get("message", {}).get("content", "")
+        # Gather all text parts
+        if isinstance(content, str):
+            text = content
+        elif isinstance(content, list):
+            parts = []
+            for part in content:
+                pt = part.get("type", "")
+                if pt == "text":
+                    parts.append(part["text"])
+            text = "\n".join(parts)
+        else:
+            text = ""
+
+        if not text:
             continue
-        try:
-            entry = json.loads(line)
-        except json.JSONDecodeError:
-            continue
 
-        ts = entry.get("timestamp", "")
-        if not ts or ts < start_ts:
-            continue
-
-        msg_type = entry.get("type")
-
-        if msg_type == "user":
-            content = entry.get("message", {}).get("content", "")
-            # Gather all text parts
-            if isinstance(content, str):
-                text = content
-            elif isinstance(content, list):
-                parts = []
-                for part in content:
-                    pt = part.get("type", "")
-                    if pt == "text":
-                        parts.append(part["text"])
-                text = "\n".join(parts)
-            else:
-                text = ""
-
-            if not text:
-                continue
-
-            # Check if this is a slash command invocation
-            slash_cmd = extract_slash_command(text)
-            if slash_cmd:
-                output_parts.append(f"## 👤 User\n\n`{slash_cmd}`\n")
-                user_count += 1
-                skip_next_user = True  # skip the expanded template that follows
-                continue
-
-            # Skip expanded slash command template
-            if skip_next_user:
-                skip_next_user = False
-                continue
-
-            output_parts.append(f"## 👤 User\n\n{text}\n")
+        # Check if this is a slash command invocation
+        slash_cmd = extract_slash_command(text)
+        if slash_cmd:
+            output_parts.append(f"## 👤 User\n\n`{slash_cmd}`\n")
             user_count += 1
+            skip_next_user = True  # skip the expanded template that follows
+            continue
 
-        elif msg_type == "assistant":
-            content = entry.get("message", {}).get("content", "")
-            if isinstance(content, str):
-                output_parts.append(f"## 🤖 Assistant\n\n{content}\n")
-                assistant_count += 1
-            elif isinstance(content, list):
-                for part in content:
-                    ptype = part.get("type", "")
-                    if ptype == "text":
-                        text = part.get("text", "").strip()
-                        if text:
-                            output_parts.append(f"## 🤖 Assistant\n\n{text}\n")
-                            assistant_count += 1
-                    elif ptype == "tool_use":
-                        name = part.get("name", "unknown")
-                        inp = part.get("input", {})
-                        tool_count += 1
+        # Skip expanded slash command template
+        if skip_next_user:
+            skip_next_user = False
+            continue
 
-                        if name in ("Write", "write_to_file", "create_file",
-                                    "MultiTool::CreateFile"):
-                            fp = (inp.get("file_path") or inp.get("path")
-                                  or "unknown")
-                            output_parts.append(
-                                f"### 🔧 Tool: `{name}`\n\n"
-                                f"**File:** `{fp}`\n"
-                            )
-                        elif name in ("Edit", "str_replace_editor",
-                                      "MultiTool::StrReplace"):
-                            fp = (inp.get("file_path") or inp.get("path")
-                                  or "unknown")
-                            output_parts.append(
-                                f"### 🔧 Tool: `{name}`\n\n"
-                                f"**File:** `{fp}`\n"
-                            )
-                        elif name in ("Bash", "execute_command", "bash",
-                                      "MultiTool::Bash"):
-                            cmd = (inp.get("command") or inp.get("content")
-                                   or "...")
-                            if len(cmd) > 500:
-                                cmd = cmd[:500] + "\n# ... (truncated)"
-                            output_parts.append(
-                                f"### 🔧 Tool: `{name}`\n\n"
-                                f"```bash\n{cmd}\n```\n"
-                            )
-                        elif name in ("Read", "read_file",
-                                      "MultiTool::ReadFile"):
-                            fp = (inp.get("file_path") or inp.get("path")
-                                  or "unknown")
-                            output_parts.append(
-                                f"### 🔧 Tool: `{name}`\n\n"
-                                f"**File:** `{fp}`\n"
-                            )
-                        elif name in ("TodoWrite", "TodoRead"):
-                            output_parts.append(
-                                f"### 🔧 Tool: `{name}` — task list updated\n"
-                            )
-                        elif name in ("WebSearch", "WebFetch"):
-                            q = (inp.get("query") or inp.get("url") or "...")
-                            output_parts.append(
-                                f"### 🔧 Tool: `{name}`\n\n"
-                                f"**Query/URL:** {q}\n"
-                            )
-                        else:
-                            output_parts.append(
-                                f"### 🔧 Tool: `{name}`\n"
-                            )
+        output_parts.append(f"## 👤 User\n\n{text}\n")
+        user_count += 1
+
+    elif msg_type == "assistant":
+        content = entry.get("message", {}).get("content", "")
+        if isinstance(content, str):
+            output_parts.append(f"## 🤖 Assistant\n\n{content}\n")
+            assistant_count += 1
+        elif isinstance(content, list):
+            for part in content:
+                ptype = part.get("type", "")
+                if ptype == "text":
+                    text = part.get("text", "").strip()
+                    if text:
+                        output_parts.append(f"## 🤖 Assistant\n\n{text}\n")
+                        assistant_count += 1
+                elif ptype == "tool_use":
+                    name = part.get("name", "unknown")
+                    inp = part.get("input", {})
+                    tool_count += 1
+
+                    if name in ("Write", "write_to_file", "create_file",
+                                "MultiTool::CreateFile"):
+                        fp = (inp.get("file_path") or inp.get("path")
+                              or "unknown")
+                        output_parts.append(
+                            f"### 🔧 Tool: `{name}`\n\n"
+                            f"**File:** `{fp}`\n"
+                        )
+                    elif name in ("Edit", "str_replace_editor",
+                                  "MultiTool::StrReplace"):
+                        fp = (inp.get("file_path") or inp.get("path")
+                              or "unknown")
+                        output_parts.append(
+                            f"### 🔧 Tool: `{name}`\n\n"
+                            f"**File:** `{fp}`\n"
+                        )
+                    elif name in ("Bash", "execute_command", "bash",
+                                  "MultiTool::Bash"):
+                        cmd = (inp.get("command") or inp.get("content")
+                               or "...")
+                        if len(cmd) > 500:
+                            cmd = cmd[:500] + "\n# ... (truncated)"
+                        output_parts.append(
+                            f"### 🔧 Tool: `{name}`\n\n"
+                            f"```bash\n{cmd}\n```\n"
+                        )
+                    elif name in ("Read", "read_file",
+                                  "MultiTool::ReadFile"):
+                        fp = (inp.get("file_path") or inp.get("path")
+                              or "unknown")
+                        output_parts.append(
+                            f"### 🔧 Tool: `{name}`\n\n"
+                            f"**File:** `{fp}`\n"
+                        )
+                    elif name in ("TodoWrite", "TodoRead"):
+                        output_parts.append(
+                            f"### 🔧 Tool: `{name}` — task list updated\n"
+                        )
+                    elif name in ("WebSearch", "WebFetch"):
+                        q = (inp.get("query") or inp.get("url") or "...")
+                        output_parts.append(
+                            f"### 🔧 Tool: `{name}`\n\n"
+                            f"**Query/URL:** {q}\n"
+                        )
+                    else:
+                        output_parts.append(
+                            f"### 🔧 Tool: `{name}`\n"
+                        )
 
 # Build final markdown
 now_utc = datetime.now(timezone.utc).strftime("%y-%m-%d-%H-%M")
@@ -252,6 +325,8 @@ with open(tracking_file, "w") as f:
 print(f"✅ Captured: {output_filename}", file=sys.stderr)
 print(f"   {user_count} user messages, {assistant_count} assistant responses, "
       f"{tool_count} tool calls", file=sys.stderr)
+files_read = ", ".join(os.path.basename(sf) for sf in session_files)
+print(f"   Session files read: {files_read}", file=sys.stderr)
 
 # Output filename to stdout for the calling command
 print(output_filename)
