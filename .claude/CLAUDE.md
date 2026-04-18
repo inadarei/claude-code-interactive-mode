@@ -2,9 +2,9 @@
 
 This file provides guidance to Claude Code when working with code in this repository.
 
-  ## CLI Tool Preferences
+## CLI Tool Preferences
   
-  VERY IMPORTANT: When using Bash for code analysis, prefer these installed tools:
+VERY IMPORTANT: When using Bash for code analysis, if available, always use these tools instead of cloc, wc, fd, and rg:
   - `tokei` instead of `cloc`/`wc -l` — a much faster tool to use for codebase orientation and line counts
   - `ast-grep` (`sg`) — a much faster and more efficient tool to use for structural code search when regex is insufficient (e.g., finding function signatures, matching AST patterns)
   - `fd` instead of `find` — a much faster tool to use for file discovery
